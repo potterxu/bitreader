@@ -2,7 +2,6 @@ package bitreader
 
 import (
 	"fmt"
-	"log"
 )
 
 const (
@@ -24,19 +23,26 @@ func BitReader(data []byte) *BitReaderType {
 	}
 }
 
-func (reader *BitReaderType) SkipBytes(bytes int) {
-	reader.SkipBits(bytes * BYTE)
+func (reader *BitReaderType) SkipBytes(bytes int) error {
+	return reader.SkipBits(bytes * BYTE)
 }
 
-func (reader *BitReaderType) SkipBits(bits int) {
-	reader.checkBits(bits)
+func (reader *BitReaderType) SkipBits(bits int) error {
+	err := reader.checkBits(bits)
+	if err != nil {
+		return err
+	}
 	bits += reader.offset
 	reader.base += bits / BYTE
 	reader.offset += bits % BYTE
+	return nil
 }
 
-func (reader *BitReaderType) ReadBits64(bits int) int64 {
-	reader.checkBits(bits)
+func (reader *BitReaderType) ReadBits64(bits int) (int64, error) {
+	err := reader.checkBits(bits)
+	if err != nil {
+		return -1, err
+	}
 	rv := int64(0)
 	for bits > 0 {
 		value, readBits := reader.readInByte(bits)
@@ -44,15 +50,17 @@ func (reader *BitReaderType) ReadBits64(bits int) int64 {
 		rv += value
 		bits -= readBits
 	}
-	return rv
+	return rv, nil
 }
 
-func (reader *BitReaderType) ReadBits(bits int) int {
-	return int(reader.ReadBits64(bits))
+func (reader *BitReaderType) ReadBits(bits int) (int, error) {
+	val, err := reader.ReadBits64(bits)
+	return int(val), err
 }
 
-func (reader *BitReaderType) ReadBit() bool {
-	return reader.ReadBits(1) != 0
+func (reader *BitReaderType) ReadBit() (bool, error) {
+	val, err := reader.ReadBits(1)
+	return val != 0, err
 }
 
 func min(a, b int) int {
@@ -62,23 +70,23 @@ func min(a, b int) int {
 	return b
 }
 
-func (reader *BitReaderType) checkBits(bits int) bool {
+func (reader *BitReaderType) checkBits(bits int) error {
 	remain := len(reader.data) - reader.base
 	remain *= BYTE
 	remain -= reader.offset
 
 	if remain < bits || bits < 0 {
-		log.Println(fmt.Sprintf("[Out of bound](size %d, base %d, offset %d) %d bits required, but only %d remained.", len(reader.data), reader.base, reader.offset, cnt, remain))
+		return fmt.Errorf("[Out of bound](size %d, base %d, offset %d) %d bits required, but only %d remained.", len(reader.data), reader.base, reader.offset, bits, remain)
 	}
-	return true
+	return nil
 }
 
-func (reader *BitReaderType) readInByte(bits int) (rv int64, readBits int) {
-	readBits = min(bits, BYTE-reader.offset)
+func (reader *BitReaderType) readInByte(bits int) (int64, int) {
+	readBits := min(bits, BYTE-reader.offset)
 	unReadbits := BYTE - reader.offset - readBits
 	mask := (0xff >> reader.offset) ^ (0xff >> (reader.offset + readBits))
 
-	rv = (int64(reader.data[reader.base]) & int64(mask)) >> int64(unReadbits)
+	rv := (int64(reader.data[reader.base]) & int64(mask)) >> int64(unReadbits)
 
 	if readBits+reader.offset == BYTE {
 		reader.base++
@@ -87,5 +95,5 @@ func (reader *BitReaderType) readInByte(bits int) (rv int64, readBits int) {
 		reader.offset += readBits
 	}
 
-	return
+	return rv, readBits
 }
