@@ -34,7 +34,7 @@ func (reader *BitReaderType) SkipBits(bits int) error {
 	}
 	bits += reader.offset
 	reader.base += bits / BYTE
-	reader.offset += bits % BYTE
+	reader.offset = bits % BYTE
 	return nil
 }
 
